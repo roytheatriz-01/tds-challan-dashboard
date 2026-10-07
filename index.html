@@ -1,0 +1,530 @@
+<title>TDS Challan Register</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky toolbar → KPI strip → month-wise compliance grid → section matrix → challan register; upload in a side panel */
+:root{
+  --bg:#f3f5f6; --surface:#ffffff; --sunk:#e9edef; --line:#d5dce0; --fg:#17242b; --muted:#5b6b73;
+  --accent:#1f5a6b; --accent-fg:#ffffff; --accent-soft:#dcebef;
+  --ok:#1d7a4a; --ok-soft:#dcf1e4; --late:#a8620a; --late-soft:#fbecd3; --miss:#b3372f; --miss-soft:#f8dfdc;
+  --shadow:0 10px 30px rgba(20,40,50,.14);
+  --f-display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f171b; --surface:#162228; --sunk:#1c2b32; --line:#2b3d45; --fg:#e3ecef; --muted:#93a6ae;
+  --accent:#6fb6c9; --accent-fg:#0d1a1f; --accent-soft:#1d3a44;
+  --ok:#5fcf8f; --ok-soft:#173a29; --late:#e7a649; --late-soft:#3d2d13; --miss:#ef7d73; --miss-soft:#42201d;
+  --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f171b; --surface:#162228; --sunk:#1c2b32; --line:#2b3d45; --fg:#e3ecef; --muted:#93a6ae;
+  --accent:#6fb6c9; --accent-fg:#0d1a1f; --accent-soft:#1d3a44;
+  --ok:#5fcf8f; --ok-soft:#173a29; --late:#e7a649; --late-soft:#3d2d13; --miss:#ef7d73; --miss-soft:#42201d;
+  --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body)}
+.wrap{max-width:1280px;margin:0 auto;padding-inline:20px;padding-block:0 48px}
+h1,h2{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:1.5rem}
+h2{font-size:1.1rem}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* toolbar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding-block:14px}
+.brand{display:flex;flex-direction:column;gap:0;margin-right:auto;min-width:0}
+.brand small{color:var(--muted);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field>span{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+select,input[type=text],input[type=date],input[type=number],input[type=search],input[type=month]{
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-height:36px;width:100%}
+.filters select,.filters input{width:auto;max-width:220px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:7px 14px;min-height:36px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:8px}
+.btn.danger{color:var(--miss)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* notice */
+.notice{margin-top:16px;padding:12px 14px;border-radius:8px;background:var(--accent-soft);color:var(--fg)}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:20px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .lbl{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kpi .val{font-family:var(--f-display);font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kpi .sub{font-size:.82rem;color:var(--muted)}
+.kpi.warn .val{color:var(--late)} .kpi.bad .val{color:var(--miss)}
+
+section.block{margin-top:28px}
+.block-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.8rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--sunk)}
+td.r,th.r{text-align:right}
+tr:last-child td{border-bottom:0}
+tfoot td{font-weight:600;background:var(--sunk)}
+.coname{font-weight:600}
+.coname small{display:block;font-weight:400;color:var(--muted);font-family:var(--f-mono);font-size:.75rem}
+
+/* month grid */
+.grid td.cell{padding:4px}
+.cellbtn{width:100%;min-width:84px;border:1px solid transparent;border-radius:5px;padding:6px 6px;text-align:right;background:transparent;display:flex;flex-direction:column;align-items:flex-end;gap:0;line-height:1.25}
+.cellbtn .amt{font-family:var(--f-mono);font-size:.8rem}
+.cellbtn .st{font-size:.68rem;letter-spacing:.03em}
+.cellbtn.ok{background:var(--ok-soft)} .cellbtn.ok .st{color:var(--ok)}
+.cellbtn.late{background:var(--late-soft)} .cellbtn.late .st{color:var(--late)}
+.cellbtn.miss{border-color:var(--miss-soft);border-style:dashed} .cellbtn.miss .st{color:var(--miss)}
+.cellbtn.up .st{color:var(--muted)}
+.cellbtn.sel{outline:2px solid var(--accent);outline-offset:-1px}
+
+/* register */
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.75rem;font-weight:600;background:var(--accent-soft);color:var(--accent);font-family:var(--f-mono)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:600}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.late{background:var(--late-soft);color:var(--late)} .pill.miss{background:var(--miss-soft);color:var(--miss)}
+.filelink{color:var(--accent);font-weight:500;text-decoration:none}
+.filelink:hover{text-decoration:underline}
+.activefilter{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.85rem}
+
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:8px;padding:28px 20px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.empty ol{margin:0;padding-left:20px;color:var(--muted)}
+
+/* side panel */
+.scrim{position:fixed;inset:0;background:rgba(10,20,25,.45);z-index:20}
+.panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:var(--surface);z-index:21;box-shadow:var(--shadow);display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.panel header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.panel form{overflow-y:auto;padding:16px 20px 24px;display:flex;flex-direction:column;gap:14px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:480px){.row2,.row3{grid-template-columns:1fr}}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:12px;margin:0;display:flex;flex-direction:column;gap:12px}
+legend{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:0 4px}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);padding-top:10px}
+.total b{font-family:var(--f-mono);font-size:1.1rem}
+.drop{border:1.5px dashed var(--line);border-radius:8px;padding:18px;text-align:center;color:var(--muted);cursor:pointer;background:var(--sunk)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop b{color:var(--fg)}
+.hint{font-size:.78rem;color:var(--muted)}
+.err{color:var(--miss);font-size:.85rem;min-height:1.2em}
+.actions{display:flex;gap:10px;justify-content:flex-end;position:sticky;bottom:0;background:var(--surface);padding-top:8px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:6px;z-index:30;font-weight:500;max-width:calc(100% - 32px)}
+@media (max-width:640px){.wrap{padding-inline:16px}.filters select,.filters input{max-width:100%}}
+@media (prefers-reduced-motion:no-preference){.panel{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+
+<div class="top">
+  <div class="wrap">
+    <div class="brand"><small>Income-tax · Challan No./ITNS 281</small><h1>TDS Challan Register</h1></div>
+    <div class="filters">
+      <label class="field"><span>Financial year</span><select id="f-fy"></select></label>
+      <label class="field"><span>Company</span><select id="f-co"><option value="all">All companies</option></select></label>
+      <label class="field"><span>Section</span><select id="f-sec"><option value="all">All sections</option></select></label>
+      <div class="field"><span>&nbsp;</span><div style="display:flex;gap:8px">
+        <button class="btn" id="btn-co" type="button" hidden>Add company</button>
+        <button class="btn primary" id="btn-up" type="button" hidden>Upload challan</button>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section class="block" id="sec-grid">
+    <div class="block-head">
+      <h2>Month-wise deposit status</h2>
+      <div class="legend">
+        <span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>Deposited by due date</span>
+        <span><i style="background:var(--late-soft);border:1px solid var(--late)"></i>Deposited late</span>
+        <span><i style="border:1px dashed var(--miss)"></i>No challan, due date passed</span>
+      </div>
+    </div>
+    <div id="grid"></div>
+  </section>
+
+  <section class="block">
+    <div class="block-head"><h2>Section-wise summary</h2><span class="muted" id="secnote"></span></div>
+    <div id="matrix"></div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>Challans</h2>
+      <div class="filters">
+        <input type="search" id="f-q" placeholder="Search challan no., BSR, note">
+        <button class="btn" id="btn-csv" type="button" hidden>Export CSV</button>
+      </div>
+    </div>
+    <div class="activefilter" id="active" style="margin-bottom:8px"></div>
+    <div id="register"></div>
+  </section>
+</main>
+
+<!-- upload panel -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="panel" id="panel" hidden aria-labelledby="p-title" role="dialog">
+  <header><h2 id="p-title">Upload challan</h2><button class="btn ghost" type="button" id="p-close">Close</button></header>
+  <form id="form" novalidate>
+    <div class="row2">
+      <label class="field"><span>Company</span><select id="u-co" required></select></label>
+      <label class="field"><span>Section</span><input type="text" id="u-sec" list="sections" placeholder="e.g. 194C" required></label>
+    </div>
+    <div class="row2">
+      <label class="field"><span>Month of deduction</span><input type="month" id="u-period" required></label>
+      <label class="field"><span>Minor head</span><select id="u-minor"><option value="200">200 · TDS payable by taxpayer</option><option value="400">400 · TDS regular assessment</option></select></label>
+    </div>
+    <fieldset><legend>Challan details</legend>
+      <div class="row3">
+        <label class="field"><span>BSR code</span><input type="text" id="u-bsr" inputmode="numeric" maxlength="7" placeholder="7 digits" class="mono"></label>
+        <label class="field"><span>Deposit date</span><input type="date" id="u-date" required></label>
+        <label class="field"><span>Challan serial no.</span><input type="text" id="u-no" inputmode="numeric" maxlength="5" placeholder="5 digits" class="mono"></label>
+      </div>
+      <div class="hint" id="u-due"></div>
+    </fieldset>
+    <fieldset><legend>Amount (₹)</legend>
+      <div class="row3">
+        <label class="field"><span>Tax</span><input type="number" min="0" step="1" id="u-tds" class="num" value=""></label>
+        <label class="field"><span>Surcharge</span><input type="number" min="0" step="1" id="u-sur" class="num"></label>
+        <label class="field"><span>Cess</span><input type="number" min="0" step="1" id="u-cess" class="num"></label>
+        <label class="field"><span>Interest</span><input type="number" min="0" step="1" id="u-int" class="num"></label>
+        <label class="field"><span>Fee u/s 234E</span><input type="number" min="0" step="1" id="u-fee" class="num"></label>
+        <label class="field"><span>Others</span><input type="number" min="0" step="1" id="u-oth" class="num"></label>
+      </div>
+      <div class="total"><span class="muted">Total deposited</span><b id="u-total">₹0</b></div>
+    </fieldset>
+    <label class="field"><span>Note</span><input type="text" id="u-note" placeholder="e.g. Contractor payments, Triveni Mall"></label>
+    <div>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose challan file"><b>Drop the challan PDF or image here</b><br>or click to choose · up to 20 MB</div>
+      <input type="file" id="u-file" accept="application/pdf,image/*" hidden>
+      <div class="hint" id="u-fname" style="margin-top:6px"></div>
+    </div>
+    <div class="err" id="u-err"></div>
+    <div class="actions"><button type="button" class="btn" id="u-cancel">Cancel</button><button type="submit" class="btn primary" id="u-save">Save challan</button></div>
+  </form>
+</aside>
+
+<!-- company panel -->
+<aside class="panel" id="cpanel" hidden aria-labelledby="c-title" role="dialog">
+  <header><h2 id="c-title">Add company</h2><button class="btn ghost" type="button" id="c-close">Close</button></header>
+  <form id="cform" novalidate>
+    <label class="field"><span>Company name</span><input type="text" id="c-name" required placeholder="As registered on TRACES"></label>
+    <label class="field"><span>TAN</span><input type="text" id="c-tan" maxlength="10" placeholder="e.g. CALA12345B" class="mono" style="text-transform:uppercase"></label>
+    <div class="hint">TAN format: 4 letters, 5 digits, 1 letter.</div>
+    <div class="err" id="c-err"></div>
+    <div class="actions"><button type="button" class="btn" id="c-cancel">Cancel</button><button type="submit" class="btn primary">Add company</button></div>
+    <div id="c-list"></div>
+  </form>
+</aside>
+
+<datalist id="sections"></datalist>
+<input type="file" id="attach-file" accept="application/pdf,image/*" hidden>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const SECTIONS=[["192","Salary"],["192A","EPF accumulated balance"],["193","Interest on securities"],["194","Dividend"],["194A","Interest other than on securities"],["194B","Lottery / crossword winnings"],["194C","Payments to contractors"],["194D","Insurance commission"],["194DA","Life insurance policy payout"],["194H","Commission or brokerage"],["194I(a)","Rent – plant & machinery"],["194I(b)","Rent – land, building, furniture"],["194IA","Transfer of immovable property"],["194IB","Rent by individuals / HUF"],["194IC","Joint development agreement"],["194J(a)","Fees for technical services"],["194J(b)","Professional fees"],["194K","Mutual fund units"],["194LA","Compensation on compulsory acquisition"],["194M","Contract / professional fees by individuals / HUF"],["194N","Cash withdrawal"],["194O","E-commerce participants"],["194Q","Purchase of goods"],["194R","Business perquisites"],["194S","Virtual digital assets"],["195","Payments to non-residents"],["206C","TCS"]];
+const SEC_NAME=Object.fromEntries(SECTIONS);
+// Sections deposited via Form 26QB/26QC/26QD/26QE: due within 30 days from the end of the month of deduction
+const THIRTY_DAY=new Set(["194IA","194IB","194M","194S"]);
+const MONTHS=["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
+const $=id=>document.getElementById(id);
+const inr=n=>"₹"+Math.round(n||0).toLocaleString("en-IN");
+const inrShort=n=>{n=n||0;if(n>=1e7)return "₹"+(n/1e7).toFixed(2)+" Cr";if(n>=1e5)return "₹"+(n/1e5).toFixed(2)+" L";return inr(n)};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const todayISO=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const fyOf=period=>{const [y,m]=period.split("-").map(Number);return m>=4?y:y-1};
+const fyLabel=y=>y+"-"+String((y+1)%100).padStart(2,"0");
+const periodsOf=fy=>MONTHS.map((_,i)=>{const m=((i+3)%12)+1;const y=m>=4?fy:fy+1;return y+"-"+pad(m)});
+const monthName=p=>{const [y,m]=p.split("-").map(Number);return new Date(y,m-1,1).toLocaleString("en-IN",{month:"short",year:"numeric"})};
+function dueDate(period,section){
+  const [y,m]=period.split("-").map(Number);
+  if(THIRTY_DAY.has(section)){const end=new Date(y,m,0);end.setDate(end.getDate()+30);return iso(end)}
+  if(m===3)return y+"-04-30";
+  const ny=m===12?y+1:y,nm=m===12?1:m+1;return ny+"-"+pad(nm)+"-07";
+}
+const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+const fmtDate=s=>s?new Date(s+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"";
+
+const curFY=(()=>{const d=new Date();return d.getMonth()+1>=4?d.getFullYear():d.getFullYear()-1})();
+let S={challans:[],companies:[],fy:curFY,co:"all",sec:"all",period:null,q:"",loaded:false};
+try{const saved=JSON.parse(localStorage.getItem("tds-filters")||"{}");if(saved.fy)S.fy=saved.fy;if(saved.co)S.co=saved.co;if(saved.sec)S.sec=saved.sec}catch(e){}
+const saveFilters=()=>{try{localStorage.setItem("tds-filters",JSON.stringify({fy:S.fy,co:S.co,sec:S.sec}))}catch(e){}};
+
+let db=null,assets=null,downloads=null,canWrite=false;
+
+$("sections").innerHTML=SECTIONS.map(([c,n])=>`<option value="${c}">${n}</option>`).join("");
+
+function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2800)}
+
+function status(c){const due=dueDate(c.period,c.section);const late=c.depositDate&&c.depositDate>due;return {due,late,days:late?daysBetween(due,c.depositDate):0}}
+
+function fillFilters(){
+  const fys=new Set([curFY,curFY-1,curFY-2,curFY+1]);S.challans.forEach(c=>fys.add(fyOf(c.period)));
+  $("f-fy").innerHTML=[...fys].sort((a,b)=>b-a).map(y=>`<option value="${y}" ${y==S.fy?"selected":""}>FY ${fyLabel(y)}</option>`).join("");
+  const cos=companyNames();
+  if(S.co!=="all"&&!cos.includes(S.co))S.co="all";
+  $("f-co").innerHTML=`<option value="all">All companies</option>`+cos.map(n=>`<option ${n===S.co?"selected":""}>${esc(n)}</option>`).join("");
+  const secs=[...new Set(S.challans.map(c=>c.section))].sort();
+  if(S.sec!=="all"&&!secs.includes(S.sec))secs.push(S.sec);
+  $("f-sec").innerHTML=`<option value="all">All sections</option>`+secs.map(s=>`<option value="${esc(s)}" ${s===S.sec?"selected":""}>${esc(s)}${SEC_NAME[s]?" · "+esc(SEC_NAME[s]):""}</option>`).join("");
+}
+function companyNames(){const s=new Set(S.companies.map(c=>c.name));S.challans.forEach(c=>s.add(c.company));return [...s].sort((a,b)=>a.localeCompare(b))}
+const tanOf=name=>(S.companies.find(c=>c.name===name)||{}).tan||"";
+
+function inFY(){return S.challans.filter(c=>fyOf(c.period)===S.fy)}
+function filtered(){
+  const q=S.q.trim().toLowerCase();
+  return inFY().filter(c=>(S.co==="all"||c.company===S.co)&&(S.sec==="all"||c.section===S.sec)&&(!S.period||(c.period===S.period.p&&c.company===S.period.co))
+    &&(!q||[c.challanNo,c.bsr,c.note,c.company,c.section,c.fileName].some(v=>String(v||"").toLowerCase().includes(q))))
+    .sort((a,b)=>(b.depositDate||"").localeCompare(a.depositDate||"")||(b.createdAt||"").localeCompare(a.createdAt||""));
+}
+
+function render(){
+  fillFilters();
+  const base=inFY().filter(c=>(S.co==="all"||c.company===S.co)&&(S.sec==="all"||c.section===S.sec));
+  const total=base.reduce((s,c)=>s+(+c.total||0),0);
+  const tax=base.reduce((s,c)=>s+(+c.tds||0)+(+c.surcharge||0)+(+c.cess||0),0);
+  const late=base.filter(c=>status(c).late);
+  const intFee=base.reduce((s,c)=>s+(+c.interest||0)+(+c.fee||0),0);
+  const noFile=base.filter(c=>!c.fileId).length;
+  const cos=S.co==="all"?companyNames():[S.co];
+  $("kpis").innerHTML=`
+   <div class="kpi"><span class="lbl">Total deposited · FY ${fyLabel(S.fy)}</span><span class="val">${inrShort(total)}</span><span class="sub">${inr(tax)} tax + ${inr(intFee)} interest/fee</span></div>
+   <div class="kpi"><span class="lbl">Challans</span><span class="val">${base.length}</span><span class="sub">${cos.length} ${cos.length===1?"company":"companies"} · ${new Set(base.map(c=>c.section)).size} sections</span></div>
+   <div class="kpi ${late.length?"warn":""}"><span class="lbl">Deposited late</span><span class="val">${late.length}</span><span class="sub">${late.length?"after the due date for the month":"all within due dates"}</span></div>
+   <div class="kpi ${noFile?"bad":""}"><span class="lbl">Challan file missing</span><span class="val">${noFile}</span><span class="sub">${noFile?"entries without an uploaded copy":"every entry has its copy"}</span></div>`;
+  renderGrid(cos);renderMatrix(base,cos);renderRegister();
+}
+
+function renderGrid(cos){
+  if(!S.loaded){$("grid").innerHTML=`<div class="empty"><span class="muted">Loading the register…</span></div>`;return}
+  if(!cos.length){$("grid").innerHTML=`<div class="empty"><b>No companies yet</b><ol><li>Add each deductor company with its TAN.</li><li>Upload the challan for each section and month after depositing TDS.</li><li>This grid then shows which months are deposited, late or still pending.</li></ol>${canWrite?`<button class="btn primary" type="button" onclick="openCompany()">Add company</button>`:""}</div>`;return}
+  const periods=periodsOf(S.fy),today=todayISO();
+  const rows=cos.map(co=>{
+    const list=inFY().filter(c=>c.company===co&&(S.sec==="all"||c.section===S.sec));
+    let rowTotal=0;
+    const cells=periods.map(p=>{
+      const cs=list.filter(c=>c.period===p);const amt=cs.reduce((s,c)=>s+(+c.total||0),0);rowTotal+=amt;
+      const sel=S.period&&S.period.p===p&&S.period.co===co?" sel":"";
+      const due=dueDate(p,S.sec==="all"?"":S.sec);
+      let cls,st;
+      if(cs.length){const l=cs.filter(c=>status(c).late).length;cls=l?"late":"ok";st=l?`${l} late`:`${cs.length} challan${cs.length>1?"s":""}`}
+      else if(today>due){cls="miss";st="none"}
+      else{cls="up";st=p<=today.slice(0,7)?"due "+fmtDate(due).slice(0,6):"—"}
+      return `<td class="cell"><button type="button" class="cellbtn ${cls}${sel}" data-co="${esc(co)}" data-p="${p}" title="${esc(co)} · ${monthName(p)} · due ${fmtDate(due)}"><span class="amt">${amt?inrShort(amt):"&nbsp;"}</span><span class="st">${st}</span></button></td>`}).join("");
+    return `<tr><td class="coname">${esc(co)}${tanOf(co)?`<small>${esc(tanOf(co))}</small>`:""}</td>${cells}<td class="r num">${inr(rowTotal)}</td></tr>`}).join("");
+  $("grid").innerHTML=`<div class="scroll"><table class="grid"><thead><tr><th>Company</th>${periods.map(p=>`<th class="r">${monthName(p).replace(" ","&nbsp;")}</th>`).join("")}<th class="r">FY total</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  $("grid").querySelectorAll(".cellbtn").forEach(b=>b.onclick=()=>{
+    const k={co:b.dataset.co,p:b.dataset.p};
+    S.period=S.period&&S.period.co===k.co&&S.period.p===k.p?null:k;render();
+    if(S.period)document.getElementById("register").scrollIntoView({behavior:"smooth",block:"start"});
+  });
+}
+
+function renderMatrix(base,cos){
+  const secs=[...new Set(base.map(c=>c.section))].sort();
+  $("secnote").textContent=secs.length?`${secs.length} section${secs.length>1?"s":""} · amounts incl. interest and fee`:"";
+  if(!S.loaded){$("matrix").innerHTML="";return}
+  if(!secs.length){$("matrix").innerHTML=`<div class="empty"><span class="muted">No challans for FY ${fyLabel(S.fy)} with these filters. Section totals appear here once challans are uploaded.</span></div>`;return}
+  const usedCos=cos.filter(co=>base.some(c=>c.company===co));
+  const sum=(co,s)=>base.filter(c=>(!co||c.company===co)&&(!s||c.section===s)).reduce((a,c)=>a+(+c.total||0),0);
+  const cnt=(co,s)=>base.filter(c=>c.company===co&&c.section===s).length;
+  $("matrix").innerHTML=`<div class="scroll"><table><thead><tr><th>Section</th>${usedCos.map(co=>`<th class="r">${esc(co)}</th>`).join("")}<th class="r">Total</th></tr></thead><tbody>
+   ${secs.map(s=>`<tr><td><span class="chip">${esc(s)}</span> <span class="muted">${esc(SEC_NAME[s]||"")}</span></td>${usedCos.map(co=>{const v=sum(co,s);return `<td class="r num">${v?inr(v)+`<div class="muted" style="font-size:.72rem">${cnt(co,s)} challan${cnt(co,s)>1?"s":""}</div>`:'<span class="muted">—</span>'}</td>`}).join("")}<td class="r num"><b>${inr(sum(null,s))}</b></td></tr>`).join("")}
+   </tbody><tfoot><tr><td>Total</td>${usedCos.map(co=>`<td class="r num">${inr(sum(co,null))}</td>`).join("")}<td class="r num">${inr(sum(null,null))}</td></tr></tfoot></table></div>`;
+}
+
+let confirmId=null;
+function renderRegister(){
+  const chips=[];
+  if(S.period)chips.push(`<span class="chip">${esc(S.period.co)} · ${monthName(S.period.p)}</span><button class="btn ghost" type="button" id="clr-p">Show all months</button>`);
+  $("active").innerHTML=chips.join("");
+  if($("clr-p"))$("clr-p").onclick=()=>{S.period=null;render()};
+  if(!S.loaded){$("register").innerHTML="";return}
+  const list=filtered();
+  if(!list.length){
+    let msg=`No challans match these filters.`;
+    if(S.period){const due=dueDate(S.period.p,S.sec==="all"?"":S.sec);msg=`No challan uploaded for ${esc(S.period.co)} for ${monthName(S.period.p)}. Due date: ${fmtDate(due)}.`}
+    $("register").innerHTML=`<div class="empty"><span class="muted">${msg}</span>${canWrite?`<button class="btn primary" type="button" id="empty-up">Upload challan</button>`:""}</div>`;
+    if($("empty-up"))$("empty-up").onclick=()=>openUpload(S.period?{company:S.period.co,period:S.period.p}:{});
+    return;
+  }
+  const tot=list.reduce((s,c)=>s+(+c.total||0),0);
+  $("register").innerHTML=`<div class="scroll"><table><thead><tr><th>Deposited</th><th>Company</th><th>Section</th><th>Month</th><th>BSR · Serial</th><th class="r">Tax</th><th class="r">Int. + Fee</th><th class="r">Total</th><th>Status</th><th>Challan copy</th><th></th></tr></thead><tbody>
+  ${list.map(c=>{const st=status(c);const tx=(+c.tds||0)+(+c.surcharge||0)+(+c.cess||0);const xf=(+c.interest||0)+(+c.fee||0)+(+c.others||0);
+    const file=c.fileId?`<a class="filelink" href="/_blob/${esc(c.fileId)}" target="_blank" rel="noopener">${esc(trunc(c.fileName||"View",22))}</a>`:(canWrite?`<button class="btn ghost" type="button" data-attach="${c.id}">Attach file</button>`:`<span class="pill miss">Missing</span>`);
+    const del=!canWrite?"":confirmId===c.id?`<button class="btn danger" type="button" data-del="${c.id}">Confirm delete</button> <button class="btn ghost" type="button" data-cancel>Keep</button>`:`<button class="btn ghost danger" type="button" data-ask="${c.id}" aria-label="Delete challan">Delete</button>`;
+    return `<tr><td class="num">${fmtDate(c.depositDate)}</td><td>${esc(c.company)}</td><td><span class="chip" title="${esc(SEC_NAME[c.section]||"")}">${esc(c.section)}</span></td><td>${monthName(c.period)}</td>
+     <td class="mono">${esc(c.bsr||"—")} · ${esc(c.challanNo||"—")}${c.note?`<div class="muted" style="font-family:var(--f-body);font-size:.78rem;white-space:normal;max-width:220px">${esc(c.note)}</div>`:""}</td>
+     <td class="r num">${inr(tx)}</td><td class="r num">${xf?inr(xf):'<span class="muted">—</span>'}</td><td class="r num"><b>${inr(c.total)}</b></td>
+     <td>${st.late?`<span class="pill late" title="Due ${fmtDate(st.due)}">${st.days} day${st.days>1?"s":""} late</span>`:`<span class="pill ok" title="Due ${fmtDate(st.due)}">On time</span>`}</td>
+     <td>${file}</td><td>${del}</td></tr>`}).join("")}
+  </tbody><tfoot><tr><td colspan="7">${list.length} challan${list.length>1?"s":""}</td><td class="r num">${inr(tot)}</td><td colspan="3"></td></tr></tfoot></table></div>`;
+  $("register").querySelectorAll("[data-ask]").forEach(b=>b.onclick=()=>{confirmId=b.dataset.ask;renderRegister()});
+  $("register").querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>{confirmId=null;renderRegister()});
+  $("register").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeChallan(b.dataset.del));
+  $("register").querySelectorAll("[data-attach]").forEach(b=>b.onclick=()=>{attachTarget=b.dataset.attach;$("attach-file").value="";$("attach-file").click()});
+}
+const trunc=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
+
+/* filters */
+$("f-fy").onchange=e=>{S.fy=+e.target.value;S.period=null;saveFilters();render()};
+$("f-co").onchange=e=>{S.co=e.target.value;S.period=null;saveFilters();render()};
+$("f-sec").onchange=e=>{S.sec=e.target.value;saveFilters();render()};
+$("f-q").oninput=e=>{S.q=e.target.value;renderRegister()};
+
+/* panels */
+let openPanelEl=null;
+function showPanel(el){openPanelEl=el;$("scrim").hidden=false;el.hidden=false;setTimeout(()=>{const f=el.querySelector("input:not([type=file]),select");f&&f.focus()},30)}
+function closePanel(){if(openPanelEl)openPanelEl.hidden=true;$("scrim").hidden=true;openPanelEl=null}
+$("scrim").onclick=closePanel;$("p-close").onclick=closePanel;$("u-cancel").onclick=closePanel;$("c-close").onclick=closePanel;$("c-cancel").onclick=closePanel;
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closePanel()});
+$("btn-up").onclick=()=>openUpload({});
+$("btn-co").onclick=()=>openCompany();
+
+let pickedFile=null;
+function openUpload(pre){
+  const cos=companyNames();
+  if(!cos.length){openCompany();toast("Add a company first");return}
+  $("form").reset();pickedFile=null;$("u-fname").textContent="";$("u-err").textContent="";
+  $("u-co").innerHTML=cos.map(n=>`<option>${esc(n)}</option>`).join("");
+  $("u-co").value=pre.company||(S.co!=="all"?S.co:cos[0]);
+  if(S.sec!=="all")$("u-sec").value=S.sec;
+  const d=new Date();d.setMonth(d.getMonth()-1);
+  $("u-period").value=pre.period||(d.getFullYear()+"-"+pad(d.getMonth()+1));
+  $("u-date").value=todayISO();
+  updateTotal();updateDue();showPanel($("panel"));
+}
+const amtIds=["u-tds","u-sur","u-cess","u-int","u-fee","u-oth"];
+function updateTotal(){$("u-total").textContent=inr(amtIds.reduce((s,id)=>s+(+$(id).value||0),0))}
+amtIds.forEach(id=>$(id).addEventListener("input",updateTotal));
+function updateDue(){
+  const p=$("u-period").value,s=$("u-sec").value.trim(),d=$("u-date").value;
+  if(!p){$("u-due").textContent="";return}
+  const due=dueDate(p,s);let t=`Due date for ${monthName(p)}${s?" u/s "+s:""}: ${fmtDate(due)}.`;
+  if(d&&d>due){const n=daysBetween(due,d);t+=` This deposit is ${n} day${n>1?"s":""} late; interest u/s 201(1A) applies.`}
+  $("u-due").textContent=t;$("u-due").style.color=d&&d>due?"var(--late)":"";
+}
+["u-period","u-sec","u-date"].forEach(id=>$(id).addEventListener("input",updateDue));
+
+const drop=$("drop");
+drop.onclick=()=>$("u-file").click();
+drop.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("u-file").click()}};
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
+drop.ondragleave=()=>drop.classList.remove("over");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files[0])pickFile(e.dataTransfer.files[0])};
+$("u-file").onchange=e=>{if(e.target.files[0])pickFile(e.target.files[0])};
+function pickFile(f){
+  if(!/^(application\/pdf|image\/)/.test(f.type)){$("u-err").textContent="Choose a PDF or image file of the challan.";return}
+  if(f.size>20*1024*1024){$("u-err").textContent="This file is over 20 MB. Compress or rescan it and try again.";return}
+  pickedFile=f;$("u-err").textContent="";$("u-fname").textContent=`Selected: ${f.name} (${(f.size/1024).toFixed(0)} KB)`;
+}
+
+async function uploadFile(f){
+  try{const r=await assets.upload(f);return r.id}
+  catch(e){
+    const m={too_large:"The file is too large (max 20 MB).",unsupported_type:"This file type isn't accepted. Upload a PDF or image.",quota_or_state:"Storage for this dashboard is full. Delete old challan copies first.",rate_limited:"Too many uploads at once. Wait a moment and try again.",not_granted:"You don't have permission to upload files here."};
+    throw new Error(m[e&&e.code]||"The file couldn't be uploaded. Try again.");
+  }
+}
+
+$("form").onsubmit=async e=>{
+  e.preventDefault();
+  const err=$("u-err");err.textContent="";
+  const company=$("u-co").value,section=$("u-sec").value.trim().toUpperCase().replace(/\s+/g,"").replace(/\(([AB])\)/,(m,x)=>"("+x.toLowerCase()+")"),period=$("u-period").value,depositDate=$("u-date").value;
+  const bsr=$("u-bsr").value.trim(),challanNo=$("u-no").value.trim();
+  const n=id=>Math.max(0,+$(id).value||0);
+  const rec={company,section,period,depositDate,bsr,challanNo,minorHead:$("u-minor").value,tds:n("u-tds"),surcharge:n("u-sur"),cess:n("u-cess"),interest:n("u-int"),fee:n("u-fee"),others:n("u-oth"),note:$("u-note").value.trim()};
+  rec.total=rec.tds+rec.surcharge+rec.cess+rec.interest+rec.fee+rec.others;
+  if(!company)return err.textContent="Choose a company.";
+  if(!section)return err.textContent="Enter the TDS section, e.g. 194C.";
+  if(!period)return err.textContent="Choose the month in which tax was deducted.";
+  if(!depositDate)return err.textContent="Enter the date the challan was deposited.";
+  if(bsr&&!/^\d{7}$/.test(bsr))return err.textContent="BSR code must be exactly 7 digits.";
+  if(challanNo&&!/^\d{1,5}$/.test(challanNo))return err.textContent="Challan serial number must be up to 5 digits.";
+  if(!rec.total)return err.textContent="Enter the amount deposited.";
+  const dup=S.challans.find(c=>bsr&&challanNo&&c.bsr===bsr&&c.challanNo===challanNo&&c.depositDate===depositDate);
+  if(dup)return err.textContent=`This challan (BSR ${bsr}, serial ${challanNo}, ${fmtDate(depositDate)}) is already in the register.`;
+  const btn=$("u-save");btn.disabled=true;btn.textContent=pickedFile?"Uploading file…":"Saving…";
+  try{
+    if(pickedFile){rec.fileId=await uploadFile(pickedFile);rec.fileName=pickedFile.name;rec.fileType=pickedFile.type;btn.textContent="Saving…"}
+    rec.createdAt=new Date().toISOString();
+    await db.collection("challans").add(rec);
+    closePanel();toast(`Challan saved for ${company} · ${section} · ${monthName(period)}`);
+  }catch(ex){err.textContent=ex.message&&!ex.code?ex.message:(ex.code==="invalid_argument"?"You have view-only access, so you can't add challans.":"The challan couldn't be saved. Try again.")}
+  finally{btn.disabled=false;btn.textContent="Save challan"}
+};
+
+let attachTarget=null;
+$("attach-file").onchange=async e=>{
+  const f=e.target.files[0];if(!f||!attachTarget)return;
+  if(!/^(application\/pdf|image\/)/.test(f.type)){toast("Choose a PDF or image file");return}
+  toast("Uploading "+f.name+"…");
+  try{const id=await uploadFile(f);await db.doc("challans/"+attachTarget).update({fileId:id,fileName:f.name,fileType:f.type});toast("Challan copy attached")}
+  catch(ex){toast(ex.message||"The file couldn't be attached")}
+  attachTarget=null;
+};
+
+async function removeChallan(id){
+  const c=S.challans.find(x=>x.id===id);confirmId=null;
+  try{await db.doc("challans/"+id).delete();if(c&&c.fileId&&assets){try{await assets.delete(c.fileId)}catch(e){}}toast("Challan deleted")}
+  catch(e){toast("The challan couldn't be deleted. Try again.");renderRegister()}
+}
+
+function openCompany(){
+  $("cform").reset();$("c-err").textContent="";
+  $("c-list").innerHTML=S.companies.length?`<div class="field" style="margin-top:8px"><span>Companies on file</span>${S.companies.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><span>${esc(c.name)}</span><span class="mono muted">${esc(c.tan||"")}</span></div>`).join("")}</div>`:"";
+  showPanel($("cpanel"));
+}
+$("cform").onsubmit=async e=>{
+  e.preventDefault();
+  const name=$("c-name").value.trim(),tan=$("c-tan").value.trim().toUpperCase();
+  if(!name)return $("c-err").textContent="Enter the company name.";
+  if(tan&&!/^[A-Z]{4}\d{5}[A-Z]$/.test(tan))return $("c-err").textContent="TAN should look like CALA12345B: 4 letters, 5 digits, 1 letter.";
+  if(companyNames().some(n=>n.toLowerCase()===name.toLowerCase()))return $("c-err").textContent="This company is already on file.";
+  try{await db.collection("companies").add({name,tan,createdAt:new Date().toISOString()});closePanel();toast(name+" added")}
+  catch(ex){$("c-err").textContent=ex.code==="invalid_argument"?"You have view-only access, so you can't add companies.":"The company couldn't be added. Try again."}
+};
+
+/* CSV export */
+$("btn-csv").onclick=async()=>{
+  const list=filtered();
+  const head=["Company","TAN","Section","Month of deduction","Deposit date","Due date","Days late","BSR code","Challan serial","Minor head","Tax","Surcharge","Cess","Interest","Fee 234E","Others","Total","File name","Note"];
+  const q=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=list.map(c=>{const st=status(c);return [c.company,tanOf(c.company),c.section,monthName(c.period),c.depositDate,st.due,st.days,c.bsr,c.challanNo,c.minorHead,c.tds,c.surcharge,c.cess,c.interest,c.fee,c.others,c.total,c.fileName||"",c.note||""].map(q).join(",")});
+  try{await downloads.save({filename:`TDS-challans-FY${fyLabel(S.fy)}${S.co!=="all"?"-"+S.co.replace(/\W+/g,"_"):""}.csv`,data:new Blob(["﻿"+[head.join(","),...rows].join("\r\n")],{type:"text/csv"})})}
+  catch(e){if(e&&e.code!=="cancelled"&&e.code!=="declined")toast("The CSV couldn't be saved.")}
+};
+
+render();
+
+(async()=>{
+  if(!window.claude||!claude.use){showNotice();return}
+  db=await claude.use("db");
+  if(!db){showNotice();return}
+  const [user,as,dl]=await Promise.all([claude.use("user"),claude.use("assets"),claude.use("downloads")]);
+  assets=as;downloads=dl;
+  const w=user?await user.can("data.write"):null;
+  canWrite=w!==false&&!!assets;
+  $("btn-up").hidden=!canWrite;$("btn-co").hidden=!canWrite;$("btn-csv").hidden=!downloads;
+  let gotC=false,gotX=false;
+  db.collection("challans").onSnapshot(snap=>{S.challans=snap.docs.map(d=>({id:d.id,...d.data()}));gotC=true;S.loaded=gotC&&gotX;render()},e=>toast("The register stopped updating. Reload the page."));
+  db.collection("companies").onSnapshot(snap=>{S.companies=snap.docs.map(d=>({id:d.id,...d.data()}));gotX=true;S.loaded=gotC&&gotX;render()},e=>{});
+})();
+function showNotice(){const n=$("notice");n.hidden=false;n.textContent="The shared register couldn't load. Open this page on claude.ai while signed in to view and upload challans.";S.loaded=true;render()}
+</script>
