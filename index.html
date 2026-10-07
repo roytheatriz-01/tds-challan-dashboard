@@ -1,3 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
 <title>TDS Challan Register</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -23,7 +30,7 @@
   --ok:#5fcf8f; --ok-soft:#173a29; --late:#e7a649; --late-soft:#3d2d13; --miss:#ef7d73; --miss-soft:#42201d;
   --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body)}
 .wrap{max-width:1280px;margin:0 auto;padding-inline:20px;padding-block:0 48px}
 h1,h2{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
 h1{font-size:1.5rem}
@@ -167,6 +174,9 @@ legend{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(
       <div class="filters">
         <input type="search" id="f-q" placeholder="Search challan no., BSR, note">
         <button class="btn" id="btn-csv" type="button" hidden>Export CSV</button>
+        <button class="btn" id="btn-backup" type="button" hidden>Backup</button>
+        <button class="btn" id="btn-restore" type="button" hidden>Restore</button>
+        <input type="file" id="restore-file" accept="application/json,.json" hidden>
       </div>
     </div>
     <div class="activefilter" id="active" style="margin-bottom:8px"></div>
@@ -367,7 +377,7 @@ function renderRegister(){
   const tot=list.reduce((s,c)=>s+(+c.total||0),0);
   $("register").innerHTML=`<div class="scroll"><table><thead><tr><th>Deposited</th><th>Company</th><th>Section</th><th>Month</th><th>BSR · Serial</th><th class="r">Tax</th><th class="r">Int. + Fee</th><th class="r">Total</th><th>Status</th><th>Challan copy</th><th></th></tr></thead><tbody>
   ${list.map(c=>{const st=status(c);const tx=(+c.tds||0)+(+c.surcharge||0)+(+c.cess||0);const xf=(+c.interest||0)+(+c.fee||0)+(+c.others||0);
-    const file=c.fileId?`<a class="filelink" href="/_blob/${esc(c.fileId)}" target="_blank" rel="noopener">${esc(trunc(c.fileName||"View",22))}</a>`:(canWrite?`<button class="btn ghost" type="button" data-attach="${c.id}">Attach file</button>`:`<span class="pill miss">Missing</span>`);
+    const file=c.fileId?`<a class="filelink" href="${LOCAL?"#":"/_blob/"+esc(c.fileId)}" ${LOCAL?`data-lf="${esc(c.fileId)}"`:""} target="_blank" rel="noopener">${esc(trunc(c.fileName||"View",22))}</a>`:(canWrite?`<button class="btn ghost" type="button" data-attach="${c.id}">Attach file</button>`:`<span class="pill miss">Missing</span>`);
     const del=!canWrite?"":confirmId===c.id?`<button class="btn danger" type="button" data-del="${c.id}">Confirm delete</button> <button class="btn ghost" type="button" data-cancel>Keep</button>`:`<button class="btn ghost danger" type="button" data-ask="${c.id}" aria-label="Delete challan">Delete</button>`;
     return `<tr><td class="num">${fmtDate(c.depositDate)}</td><td>${esc(c.company)}</td><td><span class="chip" title="${esc(SEC_NAME[c.section]||"")}">${esc(c.section)}</span></td><td>${monthName(c.period)}</td>
      <td class="mono">${esc(c.bsr||"—")} · ${esc(c.challanNo||"—")}${c.note?`<div class="muted" style="font-family:var(--f-body);font-size:.78rem;white-space:normal;max-width:220px">${esc(c.note)}</div>`:""}</td>
@@ -379,6 +389,11 @@ function renderRegister(){
   $("register").querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>{confirmId=null;renderRegister()});
   $("register").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeChallan(b.dataset.del));
   $("register").querySelectorAll("[data-attach]").forEach(b=>b.onclick=()=>{attachTarget=b.dataset.attach;$("attach-file").value="";$("attach-file").click()});
+  $("register").querySelectorAll("[data-lf]").forEach(a=>a.onclick=async e=>{
+    e.preventDefault();const f=await Local.getFile(a.dataset.lf);
+    if(!f){toast("This challan copy isn't stored in this browser.");return}
+    window.open(URL.createObjectURL(f.blob),"_blank","noopener");
+  });
 }
 const trunc=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
 
@@ -511,10 +526,81 @@ $("btn-csv").onclick=async()=>{
   catch(e){if(e&&e.code!=="cancelled"&&e.code!=="declined")toast("The CSV couldn't be saved.")}
 };
 
+/* Standalone mode (GitHub Pages or any web host): data and challan files stay in this browser's IndexedDB */
+let LOCAL=false;
+const Local=(()=>{
+  let dbp=null;const subs={};
+  const open=()=>dbp||(dbp=new Promise((res,rej)=>{
+    const r=indexedDB.open("tds-challan-register",1);
+    r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore("docs",{keyPath:"path"});d.createObjectStore("files",{keyPath:"id"})};
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+  }));
+  const tx=async(store,mode,fn)=>{const d=await open();return new Promise((res,rej)=>{const t=d.transaction(store,mode);const out=fn(t.objectStore(store));t.oncomplete=()=>res(out&&"result" in out?out.result:undefined);t.onerror=()=>rej(t.error)})};
+  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+  const all=async col=>(await tx("docs","readonly",s=>s.getAll())).filter(r=>r.col===col);
+  const emit=async col=>{const rows=await all(col);(subs[col]||[]).forEach(fn=>fn({docs:rows.map(r=>({id:r.id,data:()=>r.data}))}))};
+  const store={
+    collection:col=>({
+      add:async data=>{const id=uid();await tx("docs","readwrite",s=>s.put({path:col+"/"+id,col,id,data}));emit(col);return {id}},
+      onSnapshot:(next,err)=>{(subs[col]=subs[col]||[]).push(next);emit(col).catch(e=>err&&err(e));return ()=>{}},
+    }),
+    doc:path=>{const [col,id]=path.split("/");return {
+      update:async data=>{const d=await open();const cur=await tx("docs","readonly",s=>s.get(path));if(!cur)throw {code:"invalid_argument"};
+        await tx("docs","readwrite",s=>s.put({...cur,data:{...cur.data,...data}}));emit(col)},
+      delete:async()=>{await tx("docs","readwrite",s=>s.delete(path));emit(col)},
+    }},
+  };
+  const files={
+    upload:async blob=>{const id=uid();await tx("files","readwrite",s=>s.put({id,blob,type:blob.type}));return {id,url:URL.createObjectURL(blob)}},
+    delete:async id=>{await tx("files","readwrite",s=>s.delete(id));return {deleted:true}},
+  };
+  const dl={save:async({filename,data})=>{const a=document.createElement("a");a.href=URL.createObjectURL(data);a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000)}};
+  const b64=async blob=>{const u=new Uint8Array(await blob.arrayBuffer());let s="";for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return "data:"+(blob.type||"application/octet-stream")+";base64,"+btoa(s)};
+  return {
+    store,files,dl,
+    getFile:id=>tx("files","readonly",s=>s.get(id)),
+    backup:async()=>{
+      const docs=await tx("docs","readonly",s=>s.getAll());
+      const fl=await tx("files","readonly",s=>s.getAll());
+      const out={app:"tds-challan-register",version:1,exportedAt:new Date().toISOString(),docs,files:[]};
+      for(const f of fl)out.files.push({id:f.id,type:f.type,dataUrl:await b64(f.blob)});
+      return new Blob([JSON.stringify(out)],{type:"application/json"});
+    },
+    restore:async text=>{
+      const j=JSON.parse(text);if(j.app!=="tds-challan-register")throw new Error("This isn't a TDS Challan Register backup file.");
+      for(const f of j.files||[]){const blob=await (await fetch(f.dataUrl)).blob();await tx("files","readwrite",s=>s.put({id:f.id,blob,type:f.type}))}
+      await tx("docs","readwrite",s=>{(j.docs||[]).forEach(d=>s.put(d))});
+      emit("challans");emit("companies");return (j.docs||[]).filter(d=>d.col==="challans").length;
+    },
+  };
+})();
+
 render();
 
+$("btn-backup").onclick=async()=>{
+  try{await downloads.save({filename:`TDS-challan-register-backup-${todayISO()}.json`,data:await Local.backup()});toast("Backup saved. Keep it somewhere safe.")}
+  catch(e){toast("The backup couldn't be created.")}
+};
+$("btn-restore").onclick=()=>{$("restore-file").value="";$("restore-file").click()};
+$("restore-file").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{const n=await Local.restore(await f.text());toast(`Restored ${n} challan${n===1?"":"s"} from backup`)}
+  catch(ex){toast(ex.message||"The backup file couldn't be read.")}
+};
+
+function startLocal(){
+  LOCAL=true;db=Local.store;assets=Local.files;downloads=Local.dl;canWrite=true;
+  try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+  const n=$("notice");n.hidden=false;
+  n.textContent="Challans and their files are saved in this browser on this computer only. Take a Backup regularly, and use Restore to move the register to another computer or browser.";
+  ["btn-up","btn-co","btn-csv","btn-backup","btn-restore"].forEach(id=>$(id).hidden=false);
+  let gotC=false,gotX=false;
+  db.collection("challans").onSnapshot(snap=>{S.challans=snap.docs.map(d=>({id:d.id,...d.data()}));gotC=true;S.loaded=gotC&&gotX;render()},()=>toast("The register couldn't be read from this browser."));
+  db.collection("companies").onSnapshot(snap=>{S.companies=snap.docs.map(d=>({id:d.id,...d.data()}));gotX=true;S.loaded=gotC&&gotX;render()});
+}
+
 (async()=>{
-  if(!window.claude||!claude.use){showNotice();return}
+  if(!window.claude||!claude.use){if(window.indexedDB)startLocal();else showNotice();return}
   db=await claude.use("db");
   if(!db){showNotice();return}
   const [user,as,dl]=await Promise.all([claude.use("user"),claude.use("assets"),claude.use("downloads")]);
@@ -528,3 +614,6 @@ render();
 })();
 function showNotice(){const n=$("notice");n.hidden=false;n.textContent="The shared register couldn't load. Open this page on claude.ai while signed in to view and upload challans.";S.loaded=true;render()}
 </script>
+
+</body>
+</html>
